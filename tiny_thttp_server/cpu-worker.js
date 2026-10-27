@@ -1,13 +1,16 @@
 import { parentPort, workerData } from 'node:worker_threads';
 
 const durationMs = workerData?.durationMs ?? 3000;
+const start = Date.now();
 
-const startBlock = Date.now();
-while (Date.now() - startBlock < durationMs) {
-  // Heavy synchronous CPU work running on a separate OS thread
+while (Date.now() - start < durationMs) {
+  // Deliberate CPU workload for this experiment
 }
 
-parentPort.postMessage({
-  message: `Worker finished ${durationMs}ms of heavy CPU work without blocking the main Event Loop`,
-});
+const elapsedMs = Date.now() - start;
 
+parentPort.postMessage({
+  message: `Worker finished its CPU workload.`,
+  requestedMs: durationMs,
+  actualMs: elapsedMs,
+});

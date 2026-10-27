@@ -2,13 +2,28 @@ import http from 'node:http';
 import { Worker } from 'node:worker_threads';
 
 function runHeavyCpuInWorker(durationMs = 3000) {
+  const workerUrl = new URL('./cpu-worker.js', import.meta.url);
+
+  console.log('Worker file:', workerUrl.href);
+
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./cpu-worker.js', import.meta.url), {
+    const worker = new Worker(workerUrl, {
       workerData: { durationMs },
     });
-    worker.once('message', resolve);
-    worker.once('error', reject);
+
+    worker.once('message', (message) => {
+      console.log('Worker returned:', message);
+      resolve(message);
+    });
+
+    worker.once('error', (error) => {
+      console.error('Worker error:', error);
+      reject(error);
+    });
+
     worker.once('exit', (code) => {
+      console.log('Worker exited with code:', code);
+
       if (code !== 0) {
         reject(new Error(`Worker stopped with exit code ${code}`));
       }
@@ -19,7 +34,10 @@ function runHeavyCpuInWorker(durationMs = 3000) {
 const server = http.createServer(async (request, response) => {
   const start = process.hrtime();
   const startCpu = process.cpuUsage();
-  const { method, url } = request;
+  const { method } = request;
+
+  const parsedUrl =new URL(request.url ?? '/','http://localhost:3000');
+  const pathName= parsedUrl.pathname;
 
   request.on('error', (err) => {
     console.log(err);
@@ -31,12 +49,12 @@ const server = http.createServer(async (request, response) => {
     const cpu = process.cpuUsage(startCpu);
     const cpuMs = (cpu.user + cpu.system) / 1000;
     console.log(
-      `${method} ${url} ${response.statusCode} - Wall: ${timeInMs.toFixed(2)} ms | CPU: ${cpuMs.toFixed(2)} ms`
+      `${method} ${pathName} ${response.statusCode} - Wall: ${timeInMs.toFixed(2)} ms | CPU: ${cpuMs.toFixed(2)} ms`
     );
   });
 
   try {
-    if (url === '/') {
+    if (pathName === '/') {
       if (method === 'GET') {
         response.writeHead(200, { 'Content-Type': 'text/plain' });
         response.end('Hello World');
@@ -44,7 +62,7 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(405, { 'Content-Type': 'text/plain' });
         response.end('Method Not Allowed');
       }
-    } else if (url === '/health') {
+    } else if (pathName === '/health') {
       if (method === 'GET') {
         response.writeHead(200, { 'Content-Type': 'text/plain' });
         response.end('Health Check OK');
@@ -52,7 +70,7 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(405, { 'Content-Type': 'text/plain' });
         response.end('Method Not Allowed');
       }
-    } else if (url === '/products/42') {
+    } else if (pathName === '/products/42') {
       if (method === 'GET') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         const data = await simulatedAsynCDataLookup(42);
@@ -61,7 +79,7 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(405, { 'Content-Type': 'text/plain' });
         response.end('Method Not Allowed');
       }
-    } else if (url === '/block') {
+    } else if (pathName === '/block') {
       if (method === 'GET') {
         console.log('-> [MAIN THREAD] Starting heavy CPU work (blocking event loop)...');
         const startBlock = Date.now();
@@ -75,7 +93,7 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(405, { 'Content-Type': 'text/plain' });
         response.end('Method Not Allowed');
       }
-    } else if (url === '/worker-cpu') {
+    } else if (pathName === '/worker-cpu') {
       if (method === 'GET') {
         console.log('-> [WORKER THREAD] Offloading 3s heavy CPU work to worker thread...');
         const result = await runHeavyCpuInWorker(3000);

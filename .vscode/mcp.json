@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "basic_backend Docs": {
+      "type": "sse",
+      "url": "https://gitmcp.io/naimekattor/basic_backend"
+    }
+  }
+}
