@@ -77,21 +77,29 @@ const server = http.createServer(async (request, response) => {
       } else if (method === "POST") {
         const MAX_BODY_SIZE = 1 * 1024 * 1024; // 1 MiB
 let bodySize = 0;
-        let body = "";
-        request.on("data", (chunk) => {
-          bodySize += chunk.length;
-          if (bodySize > MAX_BODY_SIZE) {
-            sendJson(response, 413, {
-              error: {
-                code: "PAYLOAD_TOO_LARGE",
-                message: "Request body exceeds maximum size of 1 MiB",
-              },
-            });
-            return;
-          }
-          body = body + chunk;
-        });
+let body = "";
+let tooLarge = false;
+request.on("data", (chunk) => {
+  if (tooLarge) return; // Ignore any remaining chunks
+  bodySize += chunk.length;
+  if (bodySize > MAX_BODY_SIZE) {
+    tooLarge = true;
+    body = ""; // Free buffered memory immediately
+    response.setHeader("Connection", "close");
+    sendJson(response, 413, {
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Request body exceeds maximum size of 1 MiB",
+      },
+    });
+    // Destroy the incoming stream once the 413 response has flushed to the client
+    request.resume();
+    return;
+  }
+  body += chunk;
+});
         request.on("end", () => {
+          if (tooLarge) return;
           if (!body.trim()) {
             sendJson(response, 400, {
               error: {
