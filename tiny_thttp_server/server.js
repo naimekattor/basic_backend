@@ -72,9 +72,23 @@ const server = http.createServer(async (request, response) => {
         response.end("Method Not Allowed");
       }
     } else if (pathName === "/products") {
-      if (method === "POST") {
+      if (method === "GET") {
+        sendJson(response, 200, { products });
+      } else if (method === "POST") {
+        const MAX_BODY_SIZE = 1 * 1024 * 1024; // 1 MiB
+let bodySize = 0;
         let body = "";
         request.on("data", (chunk) => {
+          bodySize += chunk.length;
+          if (bodySize > MAX_BODY_SIZE) {
+            sendJson(response, 413, {
+              error: {
+                code: "PAYLOAD_TOO_LARGE",
+                message: "Request body exceeds maximum size of 1 MiB",
+              },
+            });
+            return;
+          }
           body = body + chunk;
         });
         request.on("end", () => {
@@ -108,7 +122,7 @@ const server = http.createServer(async (request, response) => {
             sendJson(response, 400, {
               error: {
                 code: "VALIDATION_ERROR",
-                message: "collection unchanged",
+                message: "Request body must be a JSON object",
               },
             });
             return;
@@ -122,26 +136,35 @@ const server = http.createServer(async (request, response) => {
             Number.isFinite(parsedBody.price) &&
             parsedBody.price >= 0;
 
-          if (!validName || !validPrice) {
+          const errors = {};
+
+          if (!validName) {
+            errors.name = "Name must be a non-empty string";
+          }
+          if (!validPrice) {
+            errors.price = "Price must be a non-negative number";
+          }
+
+          if (Object.keys(errors).length > 0) {
             sendJson(response, 400, {
               error: {
                 code: "VALIDATION_ERROR",
-                message:
-                  "collection unchanged",
+                message: "Validation failed",
+                details: errors,
               },
             });
             return;
           }
 
           const product = {
-  id: nextProductId++,
-  name: parsedBody.name.trim(),
-  price: parsedBody.price,
-};
+            id: nextProductId++,
+            name: parsedBody.name.trim(),
+            price: parsedBody.price,
+          };
           products.push(product);
 
           sendJson(response, 201, {
-            message: "Product created,product has an ID",
+            message: "Product created",
             product: product,
           });
         });
