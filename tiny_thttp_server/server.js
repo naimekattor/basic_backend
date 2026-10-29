@@ -34,7 +34,7 @@ function runHeavyCpuInWorker(durationMs = 3000) {
 const server = http.createServer(async (request, response) => {
   const start = process.hrtime();
   const startCpu = process.cpuUsage();
-  const { method } = request;
+  const { method,headers } = request;
 
   const parsedUrl =new URL(request.url ?? '/','http://localhost:3000');
   const pathName= parsedUrl.pathname;
@@ -70,7 +70,44 @@ const server = http.createServer(async (request, response) => {
         response.writeHead(405, { 'Content-Type': 'text/plain' });
         response.end('Method Not Allowed');
       }
-    } else if (pathName === '/products/42') {
+    }
+    else if (pathName === '/products') {
+      if (method === 'POST') {
+        let body="";
+        request.on('data',chunk=>{
+          body=body+chunk;
+        })
+        request.on('end',()=>{
+            try{
+              if(!body){
+                response.writeHead(400,{ 'Content-Type':'text/plain'});
+                response.end('Bad Request: No body provided');
+                return;
+              }
+              const parseBody=JSON.parse(body);
+              if(!parseBody.name || parseBody.price === undefined || parseBody.price === null || parseBody.name.trim() === '' || typeof parseBody.name !== 'string' || isNaN(parseBody.price) || parseBody.price === Infinity || parseBody.price < 0 || typeof parseBody.price !== 'number'){
+                response.writeHead(400,{ 'Content-Type':'text/plain'});
+                response.end('Bad Request: Invalid name or price');
+                return;
+              }
+              response.writeHead(201,{ 'Content-Type':'application/json'});
+              response.end(JSON.stringify({message:'Product created',product:parseBody}));
+              return;
+
+            }catch(err){
+              response.writeHead(400,{ 'Content-Type':'text/plain'});
+              response.end('Bad Request: Invalid JSON');
+
+              return;
+            }
+        })
+        
+      } else {
+        response.writeHead(405, { 'Content-Type': 'text/plain' });
+        response.end('Method Not Allowed');
+      }
+    }
+     else if (pathName === '/products/42') {
       if (method === 'GET') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         const data = await simulatedAsynCDataLookup(42);
